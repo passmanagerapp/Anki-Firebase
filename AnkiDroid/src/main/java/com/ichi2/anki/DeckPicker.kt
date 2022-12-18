@@ -59,6 +59,12 @@ import anki.collection.OpChanges
 import com.afollestad.materialdialogs.MaterialDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.ktx.storage
 import com.ichi2.anim.ActivityTransitionAnimation.Direction.*
 import com.ichi2.anki.AnkiDroidApp.Companion.getSharedPrefs
 import com.ichi2.anki.CollectionHelper.CollectionIntegrityStorageCheck
@@ -81,6 +87,7 @@ import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog.CustomStudyListener
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialogFactory
 import com.ichi2.anki.exception.ConfirmModSchemaException
 import com.ichi2.anki.export.ActivityExportingDelegate
+import com.ichi2.anki.model.CollectionModel
 import com.ichi2.anki.notetype.ManageNotetypes
 import com.ichi2.anki.pages.CsvImporter
 import com.ichi2.anki.preferences.AdvancedSettingsFragment
@@ -383,6 +390,9 @@ open class DeckPicker :
     // ANDROID ACTIVITY METHODS
     // ----------------------------------------------------------------------------
     /** Called when the activity is first created.  */
+    private lateinit var auth: FirebaseAuth
+    private lateinit var storage: FirebaseStorage
+    private lateinit var firestore: FirebaseFirestore
     @Throws(SQLException::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         if (showedActivityFailedScreen(savedInstanceState)) {
@@ -395,6 +405,10 @@ open class DeckPicker :
 
         // Then set theme and content view
         super.onCreate(savedInstanceState)
+        auth = FirebaseAuth.getInstance()
+        storage = Firebase.storage
+        firestore = Firebase.firestore
+        initFirebase()
 
         // handle the first load: display the app introduction
         if (!hasShownAppIntro()) {
@@ -487,6 +501,28 @@ open class DeckPicker :
         mShortAnimDuration = resources.getInteger(android.R.integer.config_shortAnimTime)
 
         Onboarding.DeckPicker(this, mRecyclerViewLayoutManager).onCreate()
+    }
+
+    private fun initFirebase() {
+        if (auth.uid.isNullOrEmpty())
+            return
+        firestore.collection("users").document(auth.uid ?: "").get()
+            .addOnSuccessListener {
+                val collectionList = it.toObject(CollectionModel::class.java)
+                collectionList?.let {
+                    Timber.d("initFirebase ${it.packageList}")
+                }
+            }.addOnFailureListener {
+            }
+    }
+
+    public override fun onStart() {
+        super.onStart()
+        // Check if user is signed in (non-null) and update UI accordingly.
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            startActivity(Intent(this, LoginFirebaseActivity::class.java))
+        }
     }
 
     private fun hasShownAppIntro(): Boolean {
@@ -672,7 +708,7 @@ open class DeckPicker :
         optionsMenuState?.run {
             menu.findItem(R.id.deck_picker_action_filter).isVisible = searchIcon
             updateUndoIconFromState(menu.findItem(R.id.action_undo), undoIcon)
-            updateSyncIconFromState(menu.findItem(R.id.action_sync), syncIcon)
+            /*updateSyncIconFromState(menu.findItem(R.id.action_sync), syncIcon)*/
             menu.findItem(R.id.action_scoped_storage_migrate).isVisible = offerToMigrate
         }
     }
@@ -764,11 +800,11 @@ open class DeckPicker :
                 Timber.i("DeckPicker:: Search button pressed")
                 return true
             }
-            R.id.action_sync -> {
+            /*R.id.action_sync -> {
                 Timber.i("DeckPicker:: Sync button pressed")
                 sync()
                 return true
-            }
+            }*/
             R.id.action_scoped_storage_migrate -> {
                 Timber.i("DeckPicker:: migrate button pressed")
                 offerToMigrate()

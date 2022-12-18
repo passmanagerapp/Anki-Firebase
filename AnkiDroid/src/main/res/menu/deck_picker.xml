@@ -16,11 +16,11 @@
             android:icon="@drawable/ic_migrate"
             android:title="@string/button_upgrade"
             ankidroid:showAsAction="always"/>
-        <item
+        <!--<item
             android:id="@+id/action_sync"
             android:icon="@drawable/ic_sync"
             android:title="@string/button_sync"
-            ankidroid:showAsAction="always"/>
+            ankidroid:showAsAction="always"/>-->
         <item
             android:id="@+id/action_undo"
             android:title="@string/undo_action_review"
@@ -55,9 +55,9 @@
             android:id="@+id/action_import"
             android:menuCategory="secondary"
             android:title="@string/menu_import"/>
-        <item
+        <!--<item
             android:id="@+id/action_export"
             android:menuCategory="secondary"
-            android:title="@string/export_collection"/>
+            android:title="@string/export_collection"/>-->
     </group>
 </menu>

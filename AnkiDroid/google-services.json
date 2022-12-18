@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "603237162658",
+    "project_id": "ankifire01",
+    "storage_bucket": "ankifire01.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:603237162658:android:5295a1618e780cebbbc1fb",
+        "android_client_info": {
+          "package_name": "com.anki.fire"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "603237162658-va854qqujlmnc51clmi2bfdoq25tfbt3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARplbXdkg6dvLLtdf5rp7KaHlLvFT-gkM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "603237162658-va854qqujlmnc51clmi2bfdoq25tfbt3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

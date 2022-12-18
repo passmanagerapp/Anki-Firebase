@@ -46,6 +46,7 @@ import java.util.function.Consumer
  * @author Tim
  */
 class IntentHandler : Activity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Note: This is our entry point from the launcher with intent: android.intent.action.MAIN
         Timber.d("onCreate()")

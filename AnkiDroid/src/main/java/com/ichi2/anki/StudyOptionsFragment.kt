@@ -382,11 +382,11 @@ class StudyOptionsFragment : Fragment(), Toolbar.OnMenuItemClickListener {
             if (mFragmented) {
                 menu.findItem(R.id.action_rename).isVisible = true
                 menu.findItem(R.id.action_delete).isVisible = true
-                menu.findItem(R.id.action_export).isVisible = true
+                // menu.findItem(R.id.action_export).isVisible = true
             } else {
                 menu.findItem(R.id.action_rename).isVisible = false
                 menu.findItem(R.id.action_delete).isVisible = false
-                menu.findItem(R.id.action_export).isVisible = false
+                // menu.findItem(R.id.action_export).isVisible = false
             }
             // Switch on or off unbury depending on if there are cards to unbury
             menu.findItem(R.id.action_unbury).isVisible = col != null && col!!.sched.haveBuried()

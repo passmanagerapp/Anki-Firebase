@@ -81,7 +81,7 @@ class DeckPickerContextMenu(private val collection: Collection) : AnalyticsDialo
             if (!dyn) {
                 contextMenuOptions.add(DeckPickerContextMenuOption.CUSTOM_STUDY)
             }
-            contextMenuOptions.add(DeckPickerContextMenuOption.EXPORT_DECK)
+            /*contextMenuOptions.add(DeckPickerContextMenuOption.EXPORT_DECK)*/
             if (collection.sched.haveBuried(did)) {
                 contextMenuOptions.add(DeckPickerContextMenuOption.UNBURY)
             }
@@ -117,10 +117,10 @@ class DeckPickerContextMenu(private val collection: Collection) : AnalyticsDialo
                 Timber.i("Rename deck selected")
                 (activity as DeckPicker).renameDeckDialog(deckId)
             }
-            DeckPickerContextMenuOption.EXPORT_DECK -> {
+            /*DeckPickerContextMenuOption.EXPORT_DECK -> {
                 Timber.i("Export deck selected")
                 (activity as DeckPicker).exportDeck(deckId)
-            }
+            }*/
             DeckPickerContextMenuOption.UNBURY -> {
                 Timber.i("Unbury deck selected")
                 collection.sched.unburyCardsForDeck(deckId)
@@ -154,7 +154,7 @@ class DeckPickerContextMenu(private val collection: Collection) : AnalyticsDialo
         DECK_OPTIONS(1, R.string.menu__deck_options),
         CUSTOM_STUDY(2, R.string.custom_study),
         DELETE_DECK(3, R.string.contextmenu_deckpicker_delete_deck),
-        EXPORT_DECK(4, R.string.export_deck),
+        /*EXPORT_DECK(4, R.string.export_deck),*/
         UNBURY(5, R.string.unbury),
         CUSTOM_STUDY_REBUILD(6, R.string.rebuild_cram_label),
         CUSTOM_STUDY_EMPTY(7, R.string.empty_cram_label),

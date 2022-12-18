@@ -8,7 +8,8 @@ apply plugin: 'app.brant.amazonappstorepublisher'
 apply plugin: 'idea'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-parcelize'
-
+apply plugin: 'com.google.firebase.crashlytics'
+apply plugin: 'com.google.gms.google-services'
 
 repositories {
     google()
@@ -29,7 +30,7 @@ android {
     compileSdkVersion 33 // change api compileSdkVersion at the same time
 
     defaultConfig {
-        applicationId "com.ichi2.anki"
+        applicationId "com.anki.fire"
         buildConfigField "Boolean", "CI", (System.getenv("CI") == "true").toString()
         buildConfigField "Boolean", "LEGACY_SCHEMA", "true"
         buildConfigField "String", "ACRA_URL", '"https://ankidroid.org/acra/report"'
@@ -355,6 +356,16 @@ dependencies {
     androidTestImplementation "androidx.test:rules:$androidx_test_version"
     androidTestImplementation "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
     androidTestImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+
+    implementation platform('com.google.firebase:firebase-bom:31.1.1'){
+        exclude group: 'com.google.protobuf'
+    }
+    implementation 'com.google.firebase:firebase-crashlytics-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-storage-ktx'
+    implementation ('com.google.firebase:firebase-firestore-ktx')
+
 }
 
 android {
