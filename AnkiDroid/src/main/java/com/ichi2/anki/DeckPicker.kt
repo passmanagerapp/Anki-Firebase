@@ -1,3 +1,4 @@
+
 /****************************************************************************************
  * Copyright (c) 2009 Andrew Dubya <andrewdubya@gmail.com>                              *
  * Copyright (c) 2009 Nicolas Raoul <nicolas.raoul@gmail.com>                           *
@@ -22,9 +23,11 @@
 // usage of 'this' in constructors when class is non-final - weak warning
 // should be OK as this is only non-final for tests
 @file:Suppress("LeakingThis")
+
 package com.ichi2.anki
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.*
 import android.content.pm.PackageManager
 import android.database.SQLException
@@ -32,6 +35,7 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.*
+import android.os.Environment.DIRECTORY_DOWNLOADS
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
@@ -60,8 +64,7 @@ import com.afollestad.materialdialogs.MaterialDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.database.*
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.ktx.storage
@@ -87,7 +90,6 @@ import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog.CustomStudyListener
 import com.ichi2.anki.dialogs.customstudy.CustomStudyDialogFactory
 import com.ichi2.anki.exception.ConfirmModSchemaException
 import com.ichi2.anki.export.ActivityExportingDelegate
-import com.ichi2.anki.model.CollectionModel
 import com.ichi2.anki.notetype.ManageNotetypes
 import com.ichi2.anki.pages.CsvImporter
 import com.ichi2.anki.preferences.AdvancedSettingsFragment
@@ -142,6 +144,7 @@ import kotlin.math.roundToLong
 
 const val MIGRATION_WAS_LAST_POSTPONED_AT_SECONDS = "secondWhenMigrationWasPostponedLast"
 const val POSTPONE_MIGRATION_INTERVAL_DAYS = 5L
+
 /**
  * The current entry point for AnkiDroid. Displays decks, allowing users to study. Many other functions.
  *
@@ -184,9 +187,11 @@ open class DeckPicker :
     private var mShortAnimDuration = 0
     private var mBackButtonPressedToExit = false
     private lateinit var mDeckPickerContent: RelativeLayout
+
     @Suppress("Deprecation") // TODO: Encapsulate ProgressDialog within a class to limit the use of deprecated functionality
     private var mProgressDialog: android.app.ProgressDialog? = null
     private var mStudyoptionsFrame: View? = null // not lateInit - can be null
+
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     lateinit var recyclerView: RecyclerView
     private lateinit var mRecyclerViewLayoutManager: LinearLayoutManager
@@ -196,6 +201,7 @@ open class DeckPicker :
     private lateinit var mNoDecksPlaceholder: LinearLayout
     private lateinit var mPullToSyncWrapper: SwipeRefreshLayout
     private lateinit var mReviewSummaryTextView: TextView
+
     @KotlinCleanup("make lateinit, but needs more changes")
     private var mUnmountReceiver: BroadcastReceiver? = null
     private lateinit var mFloatingActionMenu: DeckPickerFloatingActionMenu
@@ -253,8 +259,11 @@ open class DeckPicker :
     private val mDeckExpanderClickListener = View.OnClickListener { view: View ->
         toggleDeckExpand(view.tag as Long)
     }
-    private val mDeckClickListener = View.OnClickListener { v: View -> onDeckClick(v, DeckSelectionType.DEFAULT) }
-    private val mCountsClickListener = View.OnClickListener { v: View -> onDeckClick(v, DeckSelectionType.SHOW_STUDY_OPTIONS) }
+    private val mDeckClickListener =
+        View.OnClickListener { v: View -> onDeckClick(v, DeckSelectionType.DEFAULT) }
+    private val mCountsClickListener =
+        View.OnClickListener { v: View -> onDeckClick(v, DeckSelectionType.SHOW_STUDY_OPTIONS) }
+
     private fun onDeckClick(v: View, selectionType: DeckSelectionType) {
         val deckId = v.tag as Long
         Timber.i("DeckPicker:: Selected deck with id %d", deckId)
@@ -293,7 +302,8 @@ open class DeckPicker :
 
     private val mImportAddListener = ImportAddListener(this)
 
-    private class ImportAddListener(deckPicker: DeckPicker) : TaskListenerWithContext<DeckPicker, String, ImporterData?>(deckPicker) {
+    private class ImportAddListener(deckPicker: DeckPicker) :
+        TaskListenerWithContext<DeckPicker, String, ImporterData?>(deckPicker) {
         override fun actualOnPostExecute(context: DeckPicker, result: ImporterData?) {
             if (context.mProgressDialog != null && context.mProgressDialog!!.isShowing) {
                 context.mProgressDialog!!.dismiss()
@@ -319,15 +329,25 @@ open class DeckPicker :
                     if (data.log.isNullOrEmpty()) {
                         fileCount += 1
                         totalCardCount += data.cardCount
-                    } else { errorMsg += data.fileName + "\n" + data.log[0] + "\n" }
+                    } else {
+                        errorMsg += data.fileName + "\n" + data.log[0] + "\n"
+                    }
                 }
 
-                var dialogMsg = context.resources.getQuantityString(R.plurals.import_complete_message, fileCount, fileCount, totalCardCount)
+                var dialogMsg = context.resources.getQuantityString(
+                    R.plurals.import_complete_message,
+                    fileCount,
+                    fileCount,
+                    totalCardCount
+                )
                 if (result.errList != null) {
                     errorMsg += result.errList
                 }
                 if (errorMsg.isNotEmpty()) {
-                    dialogMsg += "\n\n" + context.resources.getString(R.string.import_stats_error, errorMsg)
+                    dialogMsg += "\n\n" + context.resources.getString(
+                        R.string.import_stats_error,
+                        errorMsg
+                    )
                 }
 
                 context.showSimpleMessageDialog(dialogMsg)
@@ -354,7 +374,8 @@ open class DeckPicker :
         return ImportReplaceListener(this)
     }
 
-    private class ImportReplaceListener(deckPicker: DeckPicker) : TaskListenerWithContext<DeckPicker, String, Computation<*>?>(deckPicker) {
+    private class ImportReplaceListener(deckPicker: DeckPicker) :
+        TaskListenerWithContext<DeckPicker, String, Computation<*>?>(deckPicker) {
         override fun actualOnPostExecute(context: DeckPicker, result: Computation<*>?) {
             Timber.i("Import: Replace Task Completed")
             if (context.mProgressDialog != null && context.mProgressDialog!!.isShowing) {
@@ -364,7 +385,10 @@ open class DeckPicker :
             if (result!!.succeeded()) {
                 context.updateDeckList()
             } else {
-                context.showSimpleMessageDialog(res.getString(R.string.import_log_no_apkg), reload = true)
+                context.showSimpleMessageDialog(
+                    res.getString(R.string.import_log_no_apkg),
+                    reload = true
+                )
             }
         }
 
@@ -392,7 +416,8 @@ open class DeckPicker :
     /** Called when the activity is first created.  */
     private lateinit var auth: FirebaseAuth
     private lateinit var storage: FirebaseStorage
-    private lateinit var firestore: FirebaseFirestore
+    private lateinit var database: DatabaseReference
+
     @Throws(SQLException::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         if (showedActivityFailedScreen(savedInstanceState)) {
@@ -407,7 +432,7 @@ open class DeckPicker :
         super.onCreate(savedInstanceState)
         auth = FirebaseAuth.getInstance()
         storage = Firebase.storage
-        firestore = Firebase.firestore
+        database = FirebaseDatabase.getInstance().reference
         initFirebase()
 
         // handle the first load: display the app introduction
@@ -459,7 +484,8 @@ open class DeckPicker :
         recyclerView.addItemDecoration(dividerDecorator)
 
         // Add background to Deckpicker activity
-        val view = if (fragmented) findViewById(R.id.deckpicker_xl_view) else findViewById<View>(R.id.root_layout)
+        val view =
+            if (fragmented) findViewById(R.id.deckpicker_xl_view) else findViewById<View>(R.id.root_layout)
 
         var hasDeckPickerBackground = false
         try {
@@ -469,7 +495,11 @@ open class DeckPicker :
             showThemedToast(this, getString(R.string.background_image_too_large), false)
         } catch (e: Exception) {
             Timber.w(e, "Failed to apply background")
-            showThemedToast(this, getString(R.string.failed_to_apply_background_image, e.localizedMessage), false)
+            showThemedToast(
+                this,
+                getString(R.string.failed_to_apply_background_image, e.localizedMessage),
+                false
+            )
         }
 
         // create and set an adapter for the RecyclerView
@@ -490,7 +520,8 @@ open class DeckPicker :
                 sync()
             }
             viewTreeObserver.addOnScrollChangedListener {
-                mPullToSyncWrapper.isEnabled = mRecyclerViewLayoutManager.findFirstCompletelyVisibleItemPosition() == 0
+                mPullToSyncWrapper.isEnabled =
+                    mRecyclerViewLayoutManager.findFirstCompletelyVisibleItemPosition() == 0
             }
         }
         // Setup the FloatingActionButtons, should work everywhere with min API >= 15
@@ -506,13 +537,36 @@ open class DeckPicker :
     private fun initFirebase() {
         if (auth.uid.isNullOrEmpty())
             return
-        firestore.collection("users").document(auth.uid ?: "").get()
+        database.child("users").child(auth.uid!!)
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    for (postSnaphot in snapshot.children) {
+                        Timber.d("postSnapshot ${postSnaphot.value}")
+                        downloadFile(postSnaphot.value as String)
+                    }
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                }
+            })
+    }
+
+    private fun downloadFile(path: String) {
+        storage.reference.child("$path.apkg").downloadUrl
             .addOnSuccessListener {
-                val collectionList = it.toObject(CollectionModel::class.java)
-                collectionList?.let {
-                    Timber.d("initFirebase ${it.packageList}")
+                val filePath = File("$filesDir/$DIRECTORY_DOWNLOADS", "$path.apkg")
+                Toast.makeText(this, "filesPath: $filePath", Toast.LENGTH_SHORT).show()
+                if (!filePath.exists()) {
+                    val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                    val request = DownloadManager.Request(it)
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    request.setDestinationInExternalPublicDir(DIRECTORY_DOWNLOADS, "$path.apkg")
+                    downloadManager.enqueue(request)
+                } else {
+                    Toast.makeText(this, "Already downladed!", Toast.LENGTH_SHORT).show()
                 }
             }.addOnFailureListener {
+                Timber.d("File exception $it")
             }
     }
 
@@ -753,7 +807,8 @@ open class DeckPicker :
                 BadgeDrawableBuilder.removeBadge(menuItem)
             }
         }
-        menuItem.iconAlpha = if (syncIcon == SyncIconState.Disabled) Themes.ALPHA_ICON_DISABLED_LIGHT else Themes.ALPHA_ICON_ENABLED_LIGHT
+        menuItem.iconAlpha =
+            if (syncIcon == SyncIconState.Disabled) Themes.ALPHA_ICON_DISABLED_LIGHT else Themes.ALPHA_ICON_ENABLED_LIGHT
     }
 
     @VisibleForTesting
@@ -816,7 +871,12 @@ open class DeckPicker :
                 return true
             }
             R.id.action_new_filtered_deck -> {
-                val createFilteredDeckDialog = CreateDeckDialog(this@DeckPicker, R.string.new_deck, CreateDeckDialog.DeckDialogType.FILTERED_DECK, null)
+                val createFilteredDeckDialog = CreateDeckDialog(
+                    this@DeckPicker,
+                    R.string.new_deck,
+                    CreateDeckDialog.DeckDialogType.FILTERED_DECK,
+                    null
+                )
                 createFilteredDeckDialog.setOnNewDeckCreated {
                     // a filtered deck was created
                     openStudyOptions(true)
@@ -903,7 +963,11 @@ open class DeckPicker :
         } else if (requestCode == PICK_APKG_FILE && resultCode == RESULT_OK) {
             val importResult = ImportUtils.handleFileImport(this, data!!)
             if (!importResult.isSuccess) {
-                ImportUtils.showImportUnsuccessfulDialog(this, importResult.humanReadableMessage, false)
+                ImportUtils.showImportUnsuccessfulDialog(
+                    this,
+                    importResult.humanReadableMessage,
+                    false
+                )
             }
         } else if (requestCode == PICK_CSV_FILE && resultCode == RESULT_OK) {
             val path = ImportUtils.getFileCachedCopy(this, data!!) ?: return
@@ -911,7 +975,11 @@ open class DeckPicker :
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_STORAGE_PERMISSION && permissions.isNotEmpty()) {
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
@@ -1008,8 +1076,12 @@ open class DeckPicker :
         // (currently 10 minutes), and is not under a metered connection (if not allowed by preference)
         val lastSyncTime = preferences.getLong("lastSyncTime", 0)
         val autoSyncIsEnabled = preferences.getBoolean("automaticSyncMode", false)
-        val syncIntervalPassed = TimeManager.time.intTimeMS() - lastSyncTime > AUTOMATIC_SYNC_MIN_INTERVAL
-        val isNotBlockedByMeteredConnection = preferences.getBoolean(getString(R.string.metered_sync_key), false) || !isActiveNetworkMetered()
+        val syncIntervalPassed =
+            TimeManager.time.intTimeMS() - lastSyncTime > AUTOMATIC_SYNC_MIN_INTERVAL
+        val isNotBlockedByMeteredConnection = preferences.getBoolean(
+            getString(R.string.metered_sync_key),
+            false
+        ) || !isActiveNetworkMetered()
 
         if (isLoggedIn() && autoSyncIsEnabled && NetworkUtils.isOnline && syncIntervalPassed && isNotBlockedByMeteredConnection) {
             Timber.i("Triggering Automatic Sync")
@@ -1026,14 +1098,20 @@ open class DeckPicker :
             if (mFloatingActionMenu.isFABOpen) {
                 mFloatingActionMenu.closeFloatingActionMenu()
             } else {
-                if (!preferences.getBoolean("exitViaDoubleTapBack", false) || mBackButtonPressedToExit) {
+                if (!preferences.getBoolean(
+                        "exitViaDoubleTapBack",
+                        false
+                    ) || mBackButtonPressedToExit
+                ) {
                     automaticSync()
                     finishWithAnimation()
                 } else {
                     showSnackbar(R.string.back_pressed_once, Snackbar.LENGTH_SHORT)
                 }
                 mBackButtonPressedToExit = true
-                HandlerUtils.executeFunctionWithDelay(Consts.SHORT_TOAST_DURATION) { mBackButtonPressedToExit = false }
+                HandlerUtils.executeFunctionWithDelay(Consts.SHORT_TOAST_DURATION) {
+                    mBackButtonPressedToExit = false
+                }
             }
         }
     }
@@ -1185,7 +1263,10 @@ open class DeckPicker :
             // It is rebuilt on the next sync or media check
             if (previous < 20300200) {
                 Timber.i("Deleting media database")
-                val mediaDb = File(CollectionHelper.getCurrentAnkiDroidDirectory(this), "collection.media.ad.db2")
+                val mediaDb = File(
+                    CollectionHelper.getCurrentAnkiDroidDirectory(this),
+                    "collection.media.ad.db2"
+                )
                 if (mediaDb.exists()) {
                     mediaDb.delete()
                 }
@@ -1291,7 +1372,12 @@ open class DeckPicker :
         val formatter = FileSizeFormatter(this)
         val collectionPath = CollectionHelper.getCollectionPath(this)
         val collectionFile = File(collectionPath)
-        showDialogFragment(DeckPickerNoSpaceToDowngradeDialog.newInstance(formatter, collectionFile))
+        showDialogFragment(
+            DeckPickerNoSpaceToDowngradeDialog.newInstance(
+                formatter,
+                collectionFile
+            )
+        )
     }
 
     @VisibleForTesting
@@ -1332,7 +1418,8 @@ open class DeckPicker :
         return UndoTaskListener(isReview, this)
     }
 
-    private class UndoTaskListener(private val isReview: Boolean, deckPicker: DeckPicker) : TaskListenerWithContext<DeckPicker, Unit, Computation<NextCard<*>>?>(deckPicker) {
+    private class UndoTaskListener(private val isReview: Boolean, deckPicker: DeckPicker) :
+        TaskListenerWithContext<DeckPicker, Unit, Computation<NextCard<*>>?>(deckPicker) {
         override fun actualOnCancelled(context: DeckPicker) {
             context.hideProgressBar()
         }
@@ -1436,7 +1523,10 @@ open class DeckPicker :
                 }
             } else {
                 val res = AnkiDroidApp.appResources
-                showSimpleMessageDialog(title = res.getString(messageResource), message = syncMessage)
+                showSimpleMessageDialog(
+                    title = res.getString(messageResource),
+                    message = syncMessage
+                )
             }
         }
     }
@@ -1474,7 +1564,11 @@ open class DeckPicker :
                 }
             }
             if (!result) {
-                showThemedToast(this@DeckPicker, resources.getString(R.string.deck_repair_error), true)
+                showThemedToast(
+                    this@DeckPicker,
+                    resources.getString(R.string.deck_repair_error),
+                    true
+                )
                 showCollectionErrorDialog()
             }
         }
@@ -1535,12 +1629,17 @@ open class DeckPicker :
     override fun deleteUnused(unused: List<String>) {
         launchCatchingTask {
             // Number of deleted files
-            val noOfDeletedFiles = withProgress(resources.getString(R.string.delete_media_message)) {
-                withCol { deleteMedia(this, unused) }
-            }
+            val noOfDeletedFiles =
+                withProgress(resources.getString(R.string.delete_media_message)) {
+                    withCol { deleteMedia(this, unused) }
+                }
             showSimpleMessageDialog(
                 title = resources.getString(R.string.delete_media_result_title),
-                message = resources.getQuantityString(R.plurals.delete_media_result_message, noOfDeletedFiles, noOfDeletedFiles)
+                message = resources.getQuantityString(
+                    R.plurals.delete_media_result_message,
+                    noOfDeletedFiles,
+                    noOfDeletedFiles
+                )
             )
         }
     }
@@ -1604,12 +1703,14 @@ open class DeckPicker :
             if (!BackendFactory.defaultLegacySchema) {
                 handleNewSync(conflict, syncMedia)
             } else {
-                val data = arrayOf(hkey, syncMedia, conflict, HostNumFactory.getInstance(baseContext))
+                val data =
+                    arrayOf(hkey, syncMedia, conflict, HostNumFactory.getInstance(baseContext))
                 Connection.sync(mSyncListener, Connection.Payload(data))
             }
         }
         // Warn the user in case the connection is metered
-        val meteredSyncIsAllowed = preferences.getBoolean(getString(R.string.metered_sync_key), false)
+        val meteredSyncIsAllowed =
+            preferences.getBoolean(getString(R.string.metered_sync_key), false)
         if (!meteredSyncIsAllowed && isActiveNetworkMetered()) {
             MaterialDialog(this).show {
                 message(R.string.metered_sync_warning)
@@ -1651,7 +1752,13 @@ open class DeckPicker :
                         this@DeckPicker, resources.getString(R.string.sync_title),
                         """
                                 ${resources.getString(R.string.sync_title)}
-                                ${resources.getString(R.string.sync_up_down_size, mCountUp, mCountDown)}
+                                ${
+                        resources.getString(
+                            R.string.sync_up_down_size,
+                            mCountUp,
+                            mCountDown
+                        )
+                        }
                         """.trimIndent(),
                         false
                     )
@@ -1728,7 +1835,11 @@ open class DeckPicker :
     
                     """.trimIndent() +
                         res
-                            .getString(R.string.sync_up_down_size, mCountUp / 1024, mCountDown / 1024)
+                            .getString(
+                                R.string.sync_up_down_size,
+                                mCountUp / 1024,
+                                mCountDown / 1024
+                            )
                 )
             }
         }
@@ -1743,8 +1854,15 @@ open class DeckPicker :
                     mProgressDialog!!.dismiss()
                 }
             } catch (e: IllegalArgumentException) {
-                Timber.e(e, "Could not dismiss mProgressDialog. The Activity must have been destroyed while the AsyncTask was running")
-                CrashReportService.sendExceptionReport(e, "DeckPicker.onPostExecute", "Could not dismiss mProgressDialog")
+                Timber.e(
+                    e,
+                    "Could not dismiss mProgressDialog. The Activity must have been destroyed while the AsyncTask was running"
+                )
+                CrashReportService.sendExceptionReport(
+                    e,
+                    "DeckPicker.onPostExecute",
+                    "Could not dismiss mProgressDialog"
+                )
             }
             val syncMessage = data.message
             Timber.i("Sync Listener: onPostExecute: Data: %s", data.toString())
@@ -1801,10 +1919,19 @@ open class DeckPicker :
                             showSyncErrorDialog(SyncErrorDialog.DIALOG_SYNC_CONFLICT_RESOLUTION)
                         }
                         ConnectionResultType.BASIC_CHECK_FAILED -> {
-                            dialogMessage = res.getString(R.string.sync_basic_check_failed, res.getString(R.string.check_db))
-                            showSyncErrorDialog(SyncErrorDialog.DIALOG_SYNC_BASIC_CHECK_ERROR, joinSyncMessages(dialogMessage, syncMessage))
+                            dialogMessage = res.getString(
+                                R.string.sync_basic_check_failed,
+                                res.getString(R.string.check_db)
+                            )
+                            showSyncErrorDialog(
+                                SyncErrorDialog.DIALOG_SYNC_BASIC_CHECK_ERROR,
+                                joinSyncMessages(dialogMessage, syncMessage)
+                            )
                         }
-                        ConnectionResultType.DB_ERROR -> showSyncErrorDialog(SyncErrorDialog.DIALOG_SYNC_CORRUPT_COLLECTION, syncMessage)
+                        ConnectionResultType.DB_ERROR -> showSyncErrorDialog(
+                            SyncErrorDialog.DIALOG_SYNC_CORRUPT_COLLECTION,
+                            syncMessage
+                        )
                         ConnectionResultType.OVERWRITE_ERROR -> {
                             dialogMessage = res.getString(R.string.sync_overwrite_error)
                             showSyncErrorMessage(joinSyncMessages(dialogMessage, syncMessage))
@@ -1814,7 +1941,8 @@ open class DeckPicker :
                             showSyncErrorMessage(joinSyncMessages(dialogMessage, syncMessage))
                         }
                         ConnectionResultType.SD_ACCESS_ERROR -> {
-                            dialogMessage = res.getString(R.string.sync_write_access_error_on_storage)
+                            dialogMessage =
+                                res.getString(R.string.sync_write_access_error_on_storage)
                             showSyncErrorMessage(joinSyncMessages(dialogMessage, syncMessage))
                         }
                         ConnectionResultType.FINISH_ERROR -> {
@@ -1858,8 +1986,10 @@ open class DeckPicker :
                             )
                         }
                         ConnectionResultType.CUSTOM_SYNC_SERVER_URL -> {
-                            val url = if (result.isNotEmpty() && result[0] is CustomSyncServerUrlException) (result[0] as CustomSyncServerUrlException).url else "unknown"
-                            dialogMessage = res.getString(R.string.sync_error_invalid_sync_server, url)
+                            val url =
+                                if (result.isNotEmpty() && result[0] is CustomSyncServerUrlException) (result[0] as CustomSyncServerUrlException).url else "unknown"
+                            dialogMessage =
+                                res.getString(R.string.sync_error_invalid_sync_server, url)
                             showSyncErrorMessage(joinSyncMessages(dialogMessage, syncMessage))
                         }
                         ConnectionResultType.NETWORK_ERROR -> {
@@ -1881,7 +2011,11 @@ open class DeckPicker :
                                     )
                                 }
                             } else {
-                                dialogMessage = res.getString(R.string.sync_log_error_specific, (-1).toString(), resultType)
+                                dialogMessage = res.getString(
+                                    R.string.sync_log_error_specific,
+                                    (-1).toString(),
+                                    resultType
+                                )
                             }
                             showSyncErrorMessage(joinSyncMessages(dialogMessage, syncMessage))
                         }
@@ -1896,7 +2030,8 @@ open class DeckPicker :
                     Timber.i("Syncing had additional information")
                     // There was a media error, so show it
                     // Note: Do not log this data. May contain user email.
-                    val message = res.getString(R.string.sync_database_acknowledge) + "\n\n" + data.data[2]
+                    val message =
+                        res.getString(R.string.sync_database_acknowledge) + "\n\n" + data.data[2]
                     showSimpleMessageDialog(message)
                 } else if (data.data.isNotEmpty() && data.data[0] is ConflictResolution) {
                     // A full sync occurred
@@ -2236,7 +2371,8 @@ open class DeckPicker :
         renderPage()
         // Update the mini statistics bar as well
         launchCatchingTask {
-            val reviewSummaryStatsSting = AnkiStatsTaskHandler.getReviewSummaryStatisticsString(this@DeckPicker)
+            val reviewSummaryStatsSting =
+                AnkiStatsTaskHandler.getReviewSummaryStatisticsString(this@DeckPicker)
             mReviewSummaryTextView.apply {
                 text = reviewSummaryStatsSting ?: ""
                 visibility = View.VISIBLE
@@ -2271,11 +2407,13 @@ open class DeckPicker :
                     fadeOut(mDeckPickerContent, mShortAnimDuration, translation)
                 }
                 if (!placeholderShown) {
-                    fadeIn(mNoDecksPlaceholder, mShortAnimDuration, translation).startDelay = if (decksListShown) mShortAnimDuration * 2.toLong() else 0.toLong()
+                    fadeIn(mNoDecksPlaceholder, mShortAnimDuration, translation).startDelay =
+                        if (decksListShown) mShortAnimDuration * 2.toLong() else 0.toLong()
                 }
             } else {
                 if (!decksListShown) {
-                    fadeIn(mDeckPickerContent, mShortAnimDuration, translation).startDelay = if (placeholderShown) mShortAnimDuration * 2.toLong() else 0.toLong()
+                    fadeIn(mDeckPickerContent, mShortAnimDuration, translation).startDelay =
+                        if (placeholderShown) mShortAnimDuration * 2.toLong() else 0.toLong()
                 }
                 if (placeholderShown) {
                     fadeOut(mNoDecksPlaceholder, mShortAnimDuration, translation)
@@ -2309,7 +2447,11 @@ open class DeckPicker :
                 }
                 if (due != null && supportActionBar != null) {
                     val subTitle: String = if (due == 0) {
-                        res.getQuantityString(R.plurals.deckpicker_title_zero_due, col.cardCount(), col.cardCount())
+                        res.getQuantityString(
+                            R.plurals.deckpicker_title_zero_due,
+                            col.cardCount(),
+                            col.cardCount()
+                        )
                     } else {
                         res.getQuantityString(R.plurals.deckpicker_title, due, due, time)
                     }
@@ -2348,7 +2490,10 @@ open class DeckPicker :
     }
 
     fun exportDeck(did: DeckId) {
-        val msg = resources.getString(R.string.confirm_apkg_export_deck, col.decks.get(did).getString("name"))
+        val msg = resources.getString(
+            R.string.confirm_apkg_export_deck,
+            col.decks.get(did).getString("name")
+        )
         mExportingDelegate.showExportDialog(msg, did)
     }
 
@@ -2376,13 +2521,22 @@ open class DeckPicker :
             }
         } catch (e: Exception) {
             Timber.w(e)
-            showThemedToast(this, getString(R.string.create_shortcut_error, e.localizedMessage), false)
+            showThemedToast(
+                this,
+                getString(R.string.create_shortcut_error, e.localizedMessage),
+                false
+            )
         }
     }
 
     fun renameDeckDialog(did: DeckId) {
         val currentName = col.decks.name(did)
-        val createDeckDialog = CreateDeckDialog(this@DeckPicker, R.string.rename_deck, CreateDeckDialog.DeckDialogType.RENAME_DECK, null)
+        val createDeckDialog = CreateDeckDialog(
+            this@DeckPicker,
+            R.string.rename_deck,
+            CreateDeckDialog.DeckDialogType.RENAME_DECK,
+            null
+        )
         createDeckDialog.deckName = currentName
         createDeckDialog.setOnNewDeckCreated {
             dismissAllDialogFragments()
@@ -2530,14 +2684,16 @@ open class DeckPicker :
     }
 
     private fun handleEmptyCards() {
-        mEmptyCardTask = TaskManager.launchCollectionTask(FindEmptyCards(), handlerEmptyCardListener())
+        mEmptyCardTask =
+            TaskManager.launchCollectionTask(FindEmptyCards(), handlerEmptyCardListener())
     }
 
     private fun handlerEmptyCardListener(): HandleEmptyCardListener {
         return HandleEmptyCardListener(this)
     }
 
-    private class HandleEmptyCardListener(deckPicker: DeckPicker) : TaskListenerWithContext<DeckPicker, Int, List<Long?>?>(deckPicker) {
+    private class HandleEmptyCardListener(deckPicker: DeckPicker) :
+        TaskListenerWithContext<DeckPicker, Int, List<Long?>?>(deckPicker) {
         private val mNumberOfCards: Int = deckPicker.col.cardCount()
         private val mOnePercent: Int = mNumberOfCards / 100
         private var mIncreaseSinceLastUpdate = 0
@@ -2596,12 +2752,16 @@ open class DeckPicker :
             if (result.isEmpty()) {
                 context.showSimpleMessageDialog(context.resources.getString(R.string.empty_cards_none))
             } else {
-                val msg = String.format(context.resources.getString(R.string.empty_cards_count), result.size)
+                val msg = String.format(
+                    context.resources.getString(R.string.empty_cards_count),
+                    result.size
+                )
                 val dialog = ConfirmationDialog()
                 dialog.setArgs(msg)
                 dialog.setConfirm {
                     context.col.remCards(result.requireNoNulls())
-                    val message = context.resources.getString(R.string.empty_cards_deleted, result.size)
+                    val message =
+                        context.resources.getString(R.string.empty_cards_deleted, result.size)
                     context.showSnackbar(message)
                 }
                 context.showDialogFragment(dialog)
@@ -2613,7 +2773,12 @@ open class DeckPicker :
     }
 
     fun createSubDeckDialog(did: DeckId) {
-        val createDeckDialog = CreateDeckDialog(this@DeckPicker, R.string.create_subdeck, CreateDeckDialog.DeckDialogType.SUB_DECK, did)
+        val createDeckDialog = CreateDeckDialog(
+            this@DeckPicker,
+            R.string.create_subdeck,
+            CreateDeckDialog.DeckDialogType.SUB_DECK,
+            did
+        )
         createDeckDialog.setOnNewDeckCreated {
             // a deck was created
             dismissAllDialogFragments()
@@ -2635,7 +2800,8 @@ open class DeckPicker :
         get() = mDeckListAdapter.itemCount
 
     @VisibleForTesting
-    internal inner class CheckDatabaseListener : TaskListener<String, Pair<Boolean, CheckDatabaseResult?>?>() {
+    internal inner class CheckDatabaseListener :
+        TaskListener<String, Pair<Boolean, CheckDatabaseResult?>?>() {
         override fun onPreExecute() {
             mProgressDialog = StyledProgressDialog.show(
                 this@DeckPicker, AnkiDroidApp.appResources.getString(R.string.app_name),
@@ -2666,7 +2832,8 @@ open class DeckPicker :
             }
             val count = databaseResult.cardsWithFixedHomeDeckCount
             if (count != 0) {
-                val message = resources.getString(R.string.integrity_check_fixed_no_home_deck, count)
+                val message =
+                    resources.getString(R.string.integrity_check_fixed_no_home_deck, count)
                 showThemedToast(this@DeckPicker, message, false)
             }
             val msg: String
@@ -2756,7 +2923,12 @@ open class DeckPicker :
         }
 
         // Animation utility methods used by renderPage() method
-        fun fadeIn(view: View?, duration: Int, translation: Float = 0f, startAction: Runnable? = Runnable { view!!.visibility = View.VISIBLE }): ViewPropertyAnimator {
+        fun fadeIn(
+            view: View?,
+            duration: Int,
+            translation: Float = 0f,
+            startAction: Runnable? = Runnable { view!!.visibility = View.VISIBLE }
+        ): ViewPropertyAnimator {
             view!!.alpha = 0f
             view.translationY = translation
             return view.animate()
@@ -2766,7 +2938,12 @@ open class DeckPicker :
                 .withStartAction(startAction)
         }
 
-        fun fadeOut(view: View?, duration: Int, translation: Float = 0f, endAction: Runnable? = Runnable { view!!.visibility = View.GONE }): ViewPropertyAnimator {
+        fun fadeOut(
+            view: View?,
+            duration: Int,
+            translation: Float = 0f,
+            endAction: Runnable? = Runnable { view!!.visibility = View.GONE }
+        ): ViewPropertyAnimator {
             view!!.alpha = 1f
             view.translationY = 0f
             return view.animate()
@@ -2842,7 +3019,13 @@ open class DeckPicker :
         val newDirectory = getBestDefaultRootDirectory(this, File(currentDirectory))
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.manual_backup)
-            .setMessage(getString(R.string.scoped_storage_require_user_to_accept_risk, currentDirectory, newDirectory.absolutePath))
+            .setMessage(
+                getString(
+                    R.string.scoped_storage_require_user_to_accept_risk,
+                    currentDirectory,
+                    newDirectory.absolutePath
+                )
+            )
             .setPositiveButton(
                 R.string.dialog_confirm
             ) { _, _ ->
@@ -2865,6 +3048,7 @@ open class DeckPicker :
         get() = getSharedPrefs(baseContext).getLong(MIGRATION_WAS_LAST_POSTPONED_AT_SECONDS, 0L)
         set(timeInSecond) = getSharedPrefs(baseContext)
             .edit { putLong(MIGRATION_WAS_LAST_POSTPONED_AT_SECONDS, timeInSecond) }
+
     /**
      * Show a dialog offering to migrate, postpone or learn more.
      */
@@ -2913,7 +3097,8 @@ open class DeckPicker :
     }
 }
 
-const val USER_ACCEPT_MIGRATION_RISK_KEY_WITHOUT_BACKUP = "user accept the risk of migration without a backup"
+const val USER_ACCEPT_MIGRATION_RISK_KEY_WITHOUT_BACKUP =
+    "user accept the risk of migration without a backup"
 
 /** Android's onCreateOptionsMenu does not play well with coroutines, as
  * it expects the menu to have been fully configured by the time the routine
@@ -2934,6 +3119,7 @@ enum class SyncIconState {
     PendingChanges,
     FullSync,
     NotLoggedIn,
+
     /**
      * The icon should appear as disabled. Currently only occurs during scoped storage migration.
      */
